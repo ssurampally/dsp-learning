@@ -1,0 +1,33 @@
+import com.sap.gateway.ip.core.customdev.util.Message
+import groovy.json.JsonSlurper
+
+def Message processData(Message message) {
+    def body = message.getBody(String)
+    def slurper = new JsonSlurper()
+    def json = slurper.parseText(body)
+    
+    // Handle typical Datasphere OData response with "value" array
+    def dataArray = json.value ?: json
+    
+    if (dataArray instanceof List && !dataArray.isEmpty()) {
+        def headers = dataArray[0].keySet().collect { it.toString() } as List
+        def csvLines = [headers.join(',')]
+        
+        dataArray.each { row ->
+            def values = headers.collect { 
+                def val = row[it]
+                val?.toString()?.replaceAll(',', ';')?.replaceAll('\n', ' ') ?: '' 
+            }
+            csvLines.add(values.join(','))
+        }
+        
+        def csv = csvLines.join('\n')
+        message.setBody(csv)
+        message.setHeader('Content-Type', 'text/csv')
+        message.setProperty('filename', 'datasphere-export-' + new Date().format('yyyyMMdd-HHmmss') + '.csv')
+    } else {
+        message.setBody('No data found')
+    }
+    
+    return message
+}
